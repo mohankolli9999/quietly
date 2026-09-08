@@ -1,17 +1,17 @@
 # Quietly
 
-Mutes audio ads on the Spotify web player.
+Mutes audio ads on the Spotify and Amazon Music web players.
 
 No host permissions. No background service worker. No tracking. No remote code.
 No build step — the files in this repository are exactly the files that run.
 
-> Not affiliated with, endorsed by, or connected to Spotify AB.
+> Not affiliated with, endorsed by, or connected to Spotify AB or Amazon.com, Inc.
 
 ## What it does
 
-When Spotify's web player starts an audio ad, Quietly mutes the player's audio
-element and shows a small "Ad muted" pill. When the ad ends, it restores the
-previous mute state. That is the whole feature.
+When the Spotify or Amazon Music web player starts an audio ad, Quietly mutes
+its audio element and shows a small "Ad muted" pill. When the ad ends, it
+restores the previous mute state. That is the whole feature.
 
 The ad still plays. The player advances on its own. Nothing is skipped, seeked,
 clicked, blocked, or faked.
@@ -30,7 +30,8 @@ The failure mode of this design is "you hear an ad", not "your player is stuck".
 
 ## How it works
 
-Two content scripts, both on `https://open.spotify.com/*` only.
+Two content scripts, both matching `https://open.spotify.com/*` and
+`https://music.amazon.com/*`.
 
 **`src/shim.js`** (main world, `document_start`)
 
@@ -59,6 +60,12 @@ armed only once Spotify actually creates a media element, and gives up after
 Spotify re-reads `muted` from its own cache on every `load()`, so the mute is
 re-asserted on `timeupdate` while an ad is playing, and only then.
 
+On Amazon Music the same engine runs against a different marker: the now-playing
+`music-horizontal-item` under `#transport` carries a `primary-href` that is `#`
+for a song and a real click-through URL for an ad. Only the selector and that
+attribute name differ per site — the shim picks the right one by hostname
+through a small adapter, and the mute engine itself is identical.
+
 **`src/bridge.js`** (isolated world, `document_start`)
 
 Owns the counter, the settings, and the on-page pill. Talks to the shim over a
@@ -66,9 +73,12 @@ Owns the counter, the settings, and the on-page pill. Talks to the shim over a
 
 ## Permissions
 
-`storage`, and nothing else. There is no `host_permissions` key, so Chrome
-shows **no permission warning** at install. The extension cannot read or change
-any site other than the Spotify web player, and cannot make network requests.
+`storage`, and nothing else — there is no `host_permissions` key. The content
+scripts still declare a host match for `open.spotify.com` and `music.amazon.com`,
+so installing from the Web Store shows the access notice for those two sites
+("Read and change your data on open.spotify.com and music.amazon.com"); loaded
+unpacked it prompts for nothing. The extension cannot touch any other site and
+makes no network requests of its own.
 
 ## Install
 
@@ -95,13 +105,17 @@ Chrome 111+ or Edge 111+ (needs `world: "MAIN"` content scripts).
 - **Detection depends on one Spotify attribute.** If Spotify renames it the
   popup will say "detection needs an update" rather than silently doing nothing.
   Please open an issue if you see that.
-- **Not tested against a live player yet** at version 0.1.0. Behaviour is
-  derived from reading Spotify's shipped bundle.
+- **Not verified against a live player.** Spotify behaviour is derived from
+  reading its shipped bundle (and is covered by DOM tests). Amazon Music
+  detection is derived from public research, not a live capture — if Amazon's
+  `primary-href` marker has drifted, Quietly won't detect its ads until the
+  selector is updated.
 
 ## Roadmap
 
 - Firefox (should be a manifest change — no background worker, no permissions)
-- Amazon Music, pending a behavioural test of the DNR redirect path
+- Verify Amazon Music detection against a live player, and — if its queue
+  allows it — skip ads outright instead of muting
 
 ## Tests
 
@@ -116,8 +130,10 @@ It builds the detached `<audio>` element the way Spotify does, cycles the
 `data-testadtype` attribute through an ad, and asserts the player is muted at
 ad start, re-muted after Spotify resets it mid-ad, and restored — including a
 mute you set yourself — when the ad ends. The enable/disable handshake and the
-`stale` signal for a renamed attribute are covered too. There is still no
-live-player test; see the last point under [Known limitations](#known-limitations).
+`stale` signal for a renamed attribute are covered too. `test/amazon.test.html`
+runs the same engine against Amazon's `primary-href` marker, and `test/run.sh`
+runs both suites. There is still no live-player test; see the last point under
+[Known limitations](#known-limitations).
 
 ## Contributing
 

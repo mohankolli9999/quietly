@@ -12,7 +12,7 @@
   let startedAt = 0;
   let counted = false;
 
-  // The extension can be reloaded or updated while a Spotify tab is open,
+  // The extension can be reloaded or updated while a supported tab is open,
   // which invalidates this context and makes every chrome.* call throw.
   const store = (values) => {
     try {

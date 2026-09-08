@@ -8,6 +8,8 @@
     <meta charset="utf-8" />
     <title>Quietly shim test</title>
     <!-- Loaded before the fake player exists, mirroring run_at: document_start -->
+    <!-- hostname is empty under file://, so the shim reads this to pick the adapter -->
+    <script>window.__quietlySite = 'spotify';</script>
     <script src="../src/shim.js"></script>
   </head>
   <body>

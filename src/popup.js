@@ -6,9 +6,9 @@ const repoEl = document.getElementById('repo');
 
 const STATUS = {
   paused: ['Paused', 'idle'],
-  stale: ['Spotify changed — detection needs an update', 'warn'],
+  stale: ['The player changed — detection needs an update', 'warn'],
   stuck: ['Stopped muting: the ad flag never cleared', 'warn'],
-  waiting: ['Open the Spotify web player to begin', 'idle'],
+  waiting: ['Open the Spotify or Amazon Music web player to begin', 'idle'],
   ok: ['Active', 'idle']
 };
 

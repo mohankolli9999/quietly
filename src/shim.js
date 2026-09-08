@@ -1,8 +1,38 @@
 (() => {
   'use strict';
 
-  const BAR = '[data-testid="now-playing-bar"]';
-  const AD = 'ad-type-ad';
+  // Per-site detection. Everything else in this file is site-agnostic: the
+  // mute engine below never mentions Spotify or Amazon.
+  const SPOTIFY = {
+    name: 'spotify',
+    barSelector: '[data-testid="now-playing-bar"]',
+    adAttribute: 'data-testadtype',
+    // Spotify renders this unconditionally from its own isAd(state.item), so a
+    // missing attribute means the markup changed under us — report it as stale.
+    classify: (v) => (v === null ? 'stale' : v === 'ad-type-ad' ? 'ad' : 'clear')
+  };
+
+  const AMAZON = {
+    name: 'amazon',
+    barSelector: '#transport music-horizontal-item',
+    adAttribute: 'primary-href',
+    // Songs carry primary-href="#" (or none); ads carry a real click-through
+    // URL. A song and a renamed attribute look identical here, so we never
+    // report stale for Amazon — a lost node surfaces as "waiting" instead.
+    classify: (v) => (v === null || v === '#' ? 'clear' : 'ad')
+  };
+
+  // hostname is empty under file:// (the test harness), where __quietlySite
+  // picks the adapter instead. In a real tab hostname always wins, so a page
+  // script cannot use that global to steer us.
+  const site = location.hostname
+    ? (location.hostname.includes('spotify.com') ? 'spotify'
+      : location.hostname.includes('music.amazon.') ? 'amazon'
+      : null)
+    : (window.__quietlySite || null);
+  const adapter = { spotify: SPOTIFY, amazon: AMAZON }[site];
+  if (!adapter) return;
+
   const STATE_EVENT = '__quietly_state';
   const CONFIG_EVENT = '__quietly_config';
 
@@ -23,7 +53,7 @@
   let stuckTimer = null;
   let lastPayload = '';
 
-  // WeakRef so a long session does not retain every media element Spotify
+  // WeakRef so a long session does not retain every media element the player
   // discards. Dead refs are pruned as we iterate.
   const tracked = new Set();
   const priorMuted = new WeakMap();
@@ -60,7 +90,7 @@
   const muteElement = (el) => {
     if (!priorMuted.has(el)) priorMuted.set(el, el.muted);
     el.muted = true;
-    // Spotify re-reads muted from its own cache on every load(), so a single
+    // The player re-reads muted from its own cache on every load(), so a single
     // assignment at ad start is not enough.
     el.addEventListener('timeupdate', reassert, true);
   };
@@ -109,12 +139,12 @@
 
   const evaluate = () => {
     if (!bar) return;
-    const value = bar.getAttribute('data-testadtype');
-    if (value === null) {
+    const cls = adapter.classify(bar.getAttribute(adapter.adAttribute));
+    if (cls === 'stale') {
       health = 'stale';
     } else {
       if (health === 'stale') health = 'ok';
-      setAd(value === AD);
+      setAd(cls === 'ad');
     }
     emit();
   };
@@ -129,19 +159,19 @@
   const startSearch = () => {
     if (searchObserver) return;
     searchObserver = new MutationObserver(() => {
-      if (!document.querySelector(BAR)) return;
+      if (!document.querySelector(adapter.barSelector)) return;
       stopSearch();
       acquireBar();
     });
     searchObserver.observe(document, { childList: true, subtree: true });
-    // A document-wide observer is far too costly to leave running on Spotify
-    // pages that have no player at all. Give up quickly; loadstart and play
-    // re-arm the search if playback ever actually starts.
+    // A document-wide observer is far too costly to leave running on pages that
+    // have no player at all. Give up quickly; loadstart and play re-arm the
+    // search if playback ever actually starts.
     searchTimer = setTimeout(stopSearch, SEARCH_MS);
   };
 
   function acquireBar() {
-    const found = document.querySelector(BAR);
+    const found = document.querySelector(adapter.barSelector);
     if (!found) {
       startSearch();
       return;
@@ -152,7 +182,7 @@
       barObserver = new MutationObserver(evaluate);
       barObserver.observe(bar, {
         attributes: true,
-        attributeFilter: ['data-testadtype']
+        attributeFilter: [adapter.adAttribute]
       });
     }
     evaluate();
@@ -173,8 +203,8 @@
     el.addEventListener('loadstart', refresh, true);
     el.addEventListener('play', refresh, true);
     if (shouldMute()) muteElement(el);
-    // Spotify creating a media element is the only reliable sign this page has
-    // a player, so it is the cheapest moment to start looking for the bar.
+    // A media element being created is the only reliable sign this page has a
+    // player, so it is the cheapest moment to start looking for the bar.
     acquireBar();
   };
 
@@ -188,8 +218,8 @@
     return el;
   };
 
-  // Spotify builds its player with document.createElement, but the Audio
-  // constructor bypasses that path entirely, so both are covered.
+  // Players build media with document.createElement, but the Audio constructor
+  // bypasses that path entirely, so both are covered.
   const NativeAudio = window.Audio;
   window.Audio = function Audio(src) {
     const el = src === undefined ? new NativeAudio() : new NativeAudio(src);

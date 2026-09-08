@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the shim behaviour test in headless Chrome. No dependencies to install.
+# Runs the shim behaviour tests in headless Chrome. No dependencies to install.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,14 +18,24 @@ if [ -z "${CHROME_BIN:-}" ]; then
   exit 1
 fi
 
-output=$("$CHROME_BIN" --headless --disable-gpu --no-sandbox \
-  --virtual-time-budget=10000 --dump-dom \
-  "file://$HERE/shim.test.html" 2>/dev/null |
+run_one() {
+  "$CHROME_BIN" --headless --disable-gpu --no-sandbox \
+    --virtual-time-budget=10000 --dump-dom \
+    "file://$HERE/$1" 2>/dev/null |
   python3 -c '
 import sys, re, html
 match = re.search(r"<pre id=\"results\">(.*?)</pre>", sys.stdin.read(), re.S)
 print(html.unescape(match.group(1)) if match else "test page produced no results")
-')
+'
+}
 
-echo "$output"
-echo "$output" | grep -q "^ALL " || exit 1
+status=0
+for page in shim.test.html amazon.test.html; do
+  echo "== $page =="
+  output="$(run_one "$page")"
+  echo "$output"
+  echo "$output" | grep -q "^ALL " || status=1
+  echo
+done
+
+exit $status
