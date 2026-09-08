@@ -9,6 +9,7 @@
   // No real ad runs this long. If the flag is still set we assume our own
   // reading is wrong and stop muting rather than leave the user in silence.
   const STUCK_MS = 180000;
+
   const SEARCH_MS = 30000;
 
   let enabled = true;
