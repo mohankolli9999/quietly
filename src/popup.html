@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Quietly</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Quietly</h1>
+      <p id="status" class="status">Checking…</p>
+    </header>
+
+    <p class="count"><strong id="count">0</strong> ads muted</p>
+
+    <label class="row">
+      <span>Mute ads</span>
+      <input type="checkbox" id="enabled" />
+    </label>
+
+    <label class="row">
+      <span>Show on-page indicator</span>
+      <input type="checkbox" id="indicator" />
+    </label>
+
+    <footer>
+      <a id="repo" href="#" target="_blank" rel="noreferrer noopener">Source code</a>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

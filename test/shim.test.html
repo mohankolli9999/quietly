@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!--
+  Behaviour test for src/shim.js against a real DOM.
+  Run: test/run.sh     (headless Chrome; no dependencies to install)
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Quietly shim test</title>
+    <!-- Loaded before the fake player exists, mirroring run_at: document_start -->
+    <script src="../src/shim.js"></script>
+  </head>
+  <body>
+    <pre id="results">running</pre>
+    <script>
+      const results = [];
+      const check = (name, actual, expected) =>
+        results.push(
+          `${actual === expected ? 'PASS' : 'FAIL'}  ${name}` +
+            (actual === expected ? '' : `  (got ${actual}, want ${expected})`)
+        );
+
+      const settle = () => new Promise((r) => setTimeout(r, 20));
+
+      const states = [];
+      document.addEventListener('__quietly_state', (e) =>
+        states.push(JSON.parse(e.detail))
+      );
+
+      const setAdType = (value) => {
+        const bar = document.querySelector('[data-testid="now-playing-bar"]');
+        if (value === null) bar.removeAttribute('data-testadtype');
+        else bar.setAttribute('data-testadtype', value);
+      };
+
+      const configure = (enabled) =>
+        document.dispatchEvent(
+          new CustomEvent('__quietly_config', {
+            detail: JSON.stringify({ enabled })
+          })
+        );
+
+      (async () => {
+        // Mirrors the bridge handshake: config in, current state back out.
+        configure(true);
+        await settle();
+        check('handshake: shim replies with state', states.length > 0, true);
+
+        // Spotify's element is created detached and never appended.
+        const player = document.createElement('audio');
+
+        const bar = document.createElement('aside');
+        bar.setAttribute('data-testid', 'now-playing-bar');
+        bar.setAttribute('data-testadtype', 'ad-type-none');
+        document.body.appendChild(bar);
+        await settle();
+
+        check('idle: player not muted', player.muted, false);
+        check('idle: last state reports no ad', states.at(-1).ad, false);
+
+        setAdType('ad-type-ad');
+        await settle();
+        check('ad start: player muted', player.muted, true);
+        check('ad start: state reports muting', states.at(-1).muting, true);
+
+        // Spotify re-reads muted from its own cache on every load().
+        player.muted = false;
+        player.dispatchEvent(new Event('timeupdate'));
+        check('ad: mute re-asserted after Spotify resets it', player.muted, true);
+
+        const midAd = document.createElement('audio');
+        check('ad: element created mid-ad is born muted', midAd.muted, true);
+
+        setAdType('ad-type-none');
+        await settle();
+        check('ad end: player restored', player.muted, false);
+        check('ad end: mid-ad element restored', midAd.muted, false);
+        check('ad end: state reports no ad', states.at(-1).ad, false);
+
+        // A mute the user set before the ad must survive the ad.
+        const preMuted = document.createElement('audio');
+        preMuted.muted = true;
+        setAdType('ad-type-ad');
+        await settle();
+        check('user mute: still muted during ad', preMuted.muted, true);
+        setAdType('ad-type-none');
+        await settle();
+        check('user mute: preserved after ad', preMuted.muted, true);
+
+        // The Audio constructor bypasses createElement, so it is patched too.
+        const viaCtor = new Audio();
+        setAdType('ad-type-ad');
+        await settle();
+        check('Audio() constructor element is muted', viaCtor.muted, true);
+
+        configure(false);
+        await settle();
+        check('disabled mid-ad: unmuted', viaCtor.muted, false);
+        check('disabled mid-ad: state reports paused', states.at(-1).enabled, false);
+
+        configure(true);
+        await settle();
+        check('re-enabled mid-ad: muted again', viaCtor.muted, true);
+
+        setAdType('ad-type-none');
+        await settle();
+
+        // If Spotify renames the attribute we must report it, not fail silently.
+        setAdType(null);
+        await settle();
+        check('missing attribute reports stale', states.at(-1).health, 'stale');
+
+        const failed = results.filter((r) => r.startsWith('FAIL')).length;
+        results.push('', failed ? `${failed} FAILED` : `ALL ${results.length} PASSED`);
+        document.getElementById('results').textContent = results.join('\n');
+      })();
+    </script>
+  </body>
+</html>
