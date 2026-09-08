@@ -103,6 +103,22 @@ Chrome 111+ or Edge 111+ (needs `world: "MAIN"` content scripts).
 - Firefox (should be a manifest change — no background worker, no permissions)
 - Amazon Music, pending a behavioural test of the DNR redirect path
 
+## Tests
+
+`src/shim.js` ships with a dependency-free behaviour test that drives it
+against a real DOM in headless Chrome:
+
+```
+test/run.sh
+```
+
+It builds the detached `<audio>` element the way Spotify does, cycles the
+`data-testadtype` attribute through an ad, and asserts the player is muted at
+ad start, re-muted after Spotify resets it mid-ad, and restored — including a
+mute you set yourself — when the ad ends. The enable/disable handshake and the
+`stale` signal for a renamed attribute are covered too. There is still no
+live-player test; see the last point under [Known limitations](#known-limitations).
+
 ## Contributing
 
 Issues and pull requests welcome. Keep it dependency-free and keep the
