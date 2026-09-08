@@ -52,6 +52,10 @@ it is language-independent and not a hashed class name. A single
 one node, does all the detection. **There is no polling anywhere in this
 extension.**
 
+Finding that node the first time needs a document-wide observer, so that one is
+armed only once Spotify actually creates a media element, and gives up after
+30 seconds. Spotify pages with no player never pay for it.
+
 Spotify re-reads `muted` from its own cache on every `load()`, so the mute is
 re-asserted on `timeupdate` while an ad is playing, and only then.
 

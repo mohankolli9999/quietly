@@ -9,6 +9,7 @@
   // No real ad runs this long. If the flag is still set we assume our own
   // reading is wrong and stop muting rather than leave the user in silence.
   const STUCK_MS = 180000;
+  const SEARCH_MS = 30000;
 
   let enabled = true;
   let adActive = false;
@@ -17,6 +18,7 @@
   let bar = null;
   let barObserver = null;
   let searchObserver = null;
+  let searchTimer = null;
   let stuckTimer = null;
   let lastPayload = '';
 
@@ -116,15 +118,25 @@
     emit();
   };
 
+  const stopSearch = () => {
+    if (searchObserver) searchObserver.disconnect();
+    searchObserver = null;
+    clearTimeout(searchTimer);
+    searchTimer = null;
+  };
+
   const startSearch = () => {
     if (searchObserver) return;
     searchObserver = new MutationObserver(() => {
       if (!document.querySelector(BAR)) return;
-      searchObserver.disconnect();
-      searchObserver = null;
+      stopSearch();
       acquireBar();
     });
     searchObserver.observe(document, { childList: true, subtree: true });
+    // A document-wide observer is far too costly to leave running on Spotify
+    // pages that have no player at all. Give up quickly; loadstart and play
+    // re-arm the search if playback ever actually starts.
+    searchTimer = setTimeout(stopSearch, SEARCH_MS);
   };
 
   function acquireBar() {
@@ -160,6 +172,9 @@
     el.addEventListener('loadstart', refresh, true);
     el.addEventListener('play', refresh, true);
     if (shouldMute()) muteElement(el);
+    // Spotify creating a media element is the only reliable sign this page has
+    // a player, so it is the cheapest moment to start looking for the bar.
+    acquireBar();
   };
 
   const nativeCreate = Document.prototype.createElement;
@@ -197,6 +212,4 @@
     lastPayload = '';
     emit();
   });
-
-  acquireBar();
 })();
