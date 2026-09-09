@@ -117,6 +117,60 @@
         check('missing attribute ends the ad', viaCtor.muted, false);
         check('missing attribute: state reports no ad', states.at(-1).ad, false);
 
+        // --- Block mode: the Amazon skip engine (off by default) ---
+        // Music always plays via MSE (a blob: src); an ad is a plain file. Only
+        // the ad element may be seeked, and only once skip mode is armed.
+        const configureMode = (enabled, mode) =>
+          document.dispatchEvent(
+            new CustomEvent('__quietly_config', {
+              detail: JSON.stringify({ enabled, mode })
+            })
+          );
+
+        // Fully controls the properties the skip engine reads and writes, so the
+        // test does not depend on the headless media pipeline.
+        const fakeMedia = (el, src, duration, currentTime) => {
+          let ct = currentTime;
+          Object.defineProperty(el, 'src', { value: src, configurable: true });
+          Object.defineProperty(el, 'currentSrc', { value: src, configurable: true });
+          Object.defineProperty(el, 'duration', { value: duration, configurable: true });
+          Object.defineProperty(el, 'seekable', { value: { length: 1 }, configurable: true });
+          Object.defineProperty(el, 'currentTime', {
+            configurable: true,
+            get: () => ct,
+            set: (v) => {
+              ct = v;
+            }
+          });
+        };
+
+        const adEl = document.createElement('audio');
+        fakeMedia(adEl, 'https://d32a4ae04cp4zu.cloudfront.net/ad.mp3', 30, 3);
+        const musicEl = document.createElement('audio');
+        fakeMedia(musicEl, 'blob:https://music.amazon.com/abc', 200, 42);
+
+        // Default mode is mute: the ad is silenced but plays through, unseeked.
+        configureMode(true, 'mute');
+        setHref(AD_HREF);
+        await settle();
+        check('mute mode: ad element muted', adEl.muted, true);
+        check('mute mode: ad element not seeked', adEl.currentTime, 3);
+        check('mute mode: state reports blocking false', states.at(-1).blocking, false);
+        setHref('#');
+        await settle();
+
+        // Armed: the ad element is seeked to its end (a real skip) and is still
+        // muted first, so a failed skip degrades to silence, never a freeze.
+        configureMode(true, 'block');
+        setHref(AD_HREF);
+        await settle();
+        check('block mode: state reports blocking', states.at(-1).blocking, true);
+        check('block mode: ad element muted first (fallback)', adEl.muted, true);
+        check('block mode: ad element seeked to end', adEl.currentTime, 30);
+        check('block mode: blob music element never seeked', musicEl.currentTime, 42);
+        setHref('#');
+        await settle();
+
         const failed = results.filter((r) => r.startsWith('FAIL')).length;
         results.push('', failed ? `${failed} FAILED` : `ALL ${results.length} PASSED`);
         document.getElementById('results').textContent = results.join('\n');

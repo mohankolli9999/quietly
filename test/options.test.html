@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<!--
+  Behaviour test for src/options.js against a stubbed chrome.storage/runtime.
+  Run: test/run.sh     (headless Chrome; no dependencies to install)
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Quietly options test</title>
+    <script>
+      const backing = {
+        enabled: true,
+        indicator: true,
+        siteConfig: {},
+        adsMuted: 7,
+        perSite: { spotify: 5, amazon: 2 },
+        history: { '2026-09-09': 3 }
+      };
+      const changeListeners = [];
+      window.__backing = backing;
+      window.chrome = {
+        storage: {
+          local: {
+            get(defaults, cb) {
+              const out = {};
+              for (const k in defaults) out[k] = k in backing ? backing[k] : defaults[k];
+              cb(out);
+            },
+            set(values) {
+              const changes = {};
+              for (const k in values) {
+                changes[k] = { oldValue: backing[k], newValue: values[k] };
+                backing[k] = values[k];
+              }
+              changeListeners.forEach((fn) => fn(changes, 'local'));
+            }
+          },
+          onChanged: { addListener: (fn) => changeListeners.push(fn) }
+        },
+        runtime: {
+          getManifest: () => ({ homepage_url: 'https://example.test/repo', version: '0.3.0' })
+        }
+      };
+    </script>
+  </head>
+  <body>
+    <!-- Mirrors src/options.html: only the ids options.js binds to matter. -->
+    <input type="checkbox" id="enabled" />
+    <input type="checkbox" id="indicator" />
+    <input type="checkbox" id="spotify-enabled" />
+    <input type="checkbox" id="amazon-enabled" />
+    <select id="amazon-mode">
+      <option value="mute">Mute</option>
+      <option value="block">Skip (experimental)</option>
+    </select>
+    <strong id="total">0</strong>
+    <button type="button" id="reset">Reset stats</button>
+    <a id="repo" href="#">Source code</a>
+    <span id="version"></span>
+
+    <pre id="results">running</pre>
+
+    <script src="../src/options.js"></script>
+    <script>
+      (() => {
+        const results = [];
+        const check = (name, actual, expected) =>
+          results.push(
+            `${actual === expected ? 'PASS' : 'FAIL'}  ${name}` +
+              (actual === expected ? '' : `  (got ${actual}, want ${expected})`)
+          );
+
+        const $ = (id) => document.getElementById(id);
+        const enabledEl = $('enabled');
+        const indicatorEl = $('indicator');
+        const spotifyEl = $('spotify-enabled');
+        const amazonEl = $('amazon-enabled');
+        const modeEl = $('amazon-mode');
+        const totalEl = $('total');
+        const resetEl = $('reset');
+        const repoEl = $('repo');
+        const versionEl = $('version');
+        const b = window.__backing;
+
+        // Reveal guard fired, and defaults render with no siteConfig present.
+        check('first render reveals the document', document.documentElement.hasAttribute('data-ready'), true);
+        check('master enabled on by default', enabledEl.checked, true);
+        check('indicator on by default', indicatorEl.checked, true);
+        check('spotify enabled on by default', spotifyEl.checked, true);
+        check('amazon enabled on by default', amazonEl.checked, true);
+        check('amazon mode defaults to mute', modeEl.value, 'mute');
+        check('total reflects adsMuted', totalEl.textContent, '7');
+        check('repo link uses homepage_url', repoEl.href, 'https://example.test/repo');
+        check('version from manifest', versionEl.textContent, 'v0.3.0');
+
+        // Changing Amazon mode writes only that site's mode.
+        modeEl.value = 'block';
+        modeEl.dispatchEvent(new Event('change'));
+        check('amazon mode written', b.siteConfig.amazon.mode, 'block');
+
+        // Disabling Amazon must preserve the mode already set for it.
+        amazonEl.checked = false;
+        amazonEl.dispatchEvent(new Event('change'));
+        check('amazon enabled written false', b.siteConfig.amazon.enabled, false);
+        check('amazon mode preserved across the enable write', b.siteConfig.amazon.mode, 'block');
+
+        // A Spotify write must not clobber Amazon's config.
+        spotifyEl.checked = false;
+        spotifyEl.dispatchEvent(new Event('change'));
+        check('spotify enabled written false', b.siteConfig.spotify.enabled, false);
+        check('spotify write leaves amazon intact', b.siteConfig.amazon.enabled, false);
+        check('spotify write leaves amazon mode intact', b.siteConfig.amazon.mode, 'block');
+
+        // Master switches write the flat keys.
+        enabledEl.checked = false;
+        enabledEl.dispatchEvent(new Event('change'));
+        check('master enabled written', b.enabled, false);
+        indicatorEl.checked = false;
+        indicatorEl.dispatchEvent(new Event('change'));
+        check('indicator written', b.indicator, false);
+
+        // Reset clears all three stat keys.
+        resetEl.click();
+        check('reset clears total', b.adsMuted, 0);
+        check('reset clears perSite', Object.keys(b.perSite).length, 0);
+        check('reset clears history', Object.keys(b.history).length, 0);
+        check('reset re-renders total to 0', totalEl.textContent, '0');
+
+        // A stored config renders back into the controls.
+        window.chrome.storage.local.set({
+          siteConfig: { spotify: { enabled: false }, amazon: { enabled: true, mode: 'block' } }
+        });
+        check('stored spotify disable renders', spotifyEl.checked, false);
+        check('stored amazon mode renders', modeEl.value, 'block');
+
+        const failed = results.filter((r) => r.startsWith('FAIL')).length;
+        results.push('', failed ? `${failed} FAILED` : `ALL ${results.length} PASSED`);
+        document.getElementById('results').textContent = results.join('\n');
+      })();
+    </script>
+  </body>
+</html>

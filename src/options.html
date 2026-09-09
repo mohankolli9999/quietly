@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Quietly — Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Quietly</h1>
+      <p class="sub">Settings for the Spotify and Amazon Music web players.</p>
+
+      <section>
+        <h2>General</h2>
+        <label class="row">
+          <span><strong>Mute ads</strong><small>Master switch for every site</small></span>
+          <input type="checkbox" id="enabled" />
+        </label>
+        <label class="row">
+          <span><strong>Show on-page indicator</strong><small>The small "Ad muted" pill</small></span>
+          <input type="checkbox" id="indicator" />
+        </label>
+      </section>
+
+      <section>
+        <h2>Spotify</h2>
+        <label class="row">
+          <span><strong>Enable on Spotify</strong></span>
+          <input type="checkbox" id="spotify-enabled" />
+        </label>
+        <div class="row">
+          <span><strong>When an ad plays</strong></span>
+          <span class="fixed">Mute only</span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Amazon Music</h2>
+        <label class="row">
+          <span><strong>Enable on Amazon Music</strong></span>
+          <input type="checkbox" id="amazon-enabled" />
+        </label>
+        <label class="row">
+          <span
+            ><strong>When an ad plays</strong
+            ><small>Skip is experimental and not yet verified on a live player</small></span
+          >
+          <select id="amazon-mode">
+            <option value="mute">Mute</option>
+            <option value="block">Skip (experimental)</option>
+          </select>
+        </label>
+      </section>
+
+      <section>
+        <h2>Stats</h2>
+        <div class="row">
+          <span><strong id="total">0</strong> ads muted all-time</span>
+          <button type="button" id="reset" class="btn">Reset stats</button>
+        </div>
+      </section>
+
+      <footer>
+        <a id="repo" href="#" target="_blank" rel="noreferrer noopener">Source code</a>
+        <span class="ver" id="version"></span>
+      </footer>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>

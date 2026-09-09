@@ -30,7 +30,7 @@ print(html.unescape(match.group(1)) if match else "test page produced no results
 }
 
 status=0
-for page in shim.test.html amazon.test.html; do
+for page in shim.test.html amazon.test.html popup.test.html options.test.html; do
   echo "== $page =="
   output="$(run_one "$page")"
   echo "$output"

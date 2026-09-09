@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<!--
+  Behaviour test for src/popup.js against a stubbed chrome.storage/runtime.
+  Run: test/run.sh     (headless Chrome; no dependencies to install)
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Quietly popup test</title>
+    <!-- chrome.* must exist before popup.js runs, mirroring the extension env.
+         get() calls back synchronously so the initial render is done by the
+         time the assertions below run. -->
+    <script>
+      const backing = {
+        enabled: true,
+        indicator: true,
+        adsMuted: 0,
+        perSite: {},
+        history: {},
+        health: 'ok',
+        lastSeen: 0
+      };
+      const changeListeners = [];
+      window.__backing = backing;
+      window.__optionsOpened = 0;
+      window.chrome = {
+        storage: {
+          local: {
+            get(defaults, cb) {
+              const out = {};
+              for (const k in defaults) out[k] = k in backing ? backing[k] : defaults[k];
+              cb(out);
+            },
+            set(values) {
+              const changes = {};
+              for (const k in values) {
+                changes[k] = { oldValue: backing[k], newValue: values[k] };
+                backing[k] = values[k];
+              }
+              changeListeners.forEach((fn) => fn(changes, 'local'));
+            }
+          },
+          onChanged: { addListener: (fn) => changeListeners.push(fn) }
+        },
+        runtime: {
+          getManifest: () => ({ homepage_url: 'https://example.test/repo' }),
+          openOptionsPage: () => {
+            window.__optionsOpened += 1;
+          }
+        }
+      };
+    </script>
+  </head>
+  <body>
+    <!-- The elements popup.js binds to, mirroring src/popup.html. -->
+    <header>
+      <h1>Quietly</h1>
+      <p id="status" class="status">Checking…</p>
+    </header>
+    <div class="stats">
+      <p class="count"><strong id="count">0</strong> ads muted</p>
+      <p class="meta">
+        <span><strong id="today">0</strong> today</span>
+        <span><strong id="saved">0</strong> min saved</span>
+      </p>
+      <p class="bysite">
+        <span>Spotify <strong id="spotifyCount">0</strong></span>
+        <span>Amazon <strong id="amazonCount">0</strong></span>
+      </p>
+    </div>
+    <label class="row"><span>Mute ads</span><input type="checkbox" id="enabled" /></label>
+    <label class="row"><span>Show on-page indicator</span><input type="checkbox" id="indicator" /></label>
+    <footer>
+      <button type="button" id="settings" class="link">Settings</button>
+      <a id="repo" href="#" target="_blank" rel="noreferrer noopener">Source code</a>
+    </footer>
+
+    <pre id="results">running</pre>
+
+    <!-- Runs read() -> render() immediately against the stub above. -->
+    <script src="../src/popup.js"></script>
+    <script>
+      // Wrapped so these consts don't collide with popup.js's globals, which
+      // live in the shared top-level scope of a classic script.
+      (() => {
+        const results = [];
+        const check = (name, actual, expected) =>
+          results.push(
+            `${actual === expected ? 'PASS' : 'FAIL'}  ${name}` +
+              (actual === expected ? '' : `  (got ${actual}, want ${expected})`)
+          );
+
+        const statusEl = document.getElementById('status');
+        const countEl = document.getElementById('count');
+        const todayEl = document.getElementById('today');
+        const savedEl = document.getElementById('saved');
+        const spotifyEl = document.getElementById('spotifyCount');
+        const amazonEl = document.getElementById('amazonCount');
+        const enabledEl = document.getElementById('enabled');
+        const indicatorEl = document.getElementById('indicator');
+        const settingsEl = document.getElementById('settings');
+        const repoEl = document.getElementById('repo');
+        const set = (values) => window.chrome.storage.local.set(values);
+        const today = new Date().toISOString().slice(0, 10);
+
+        // The anti-flash guard: the document is revealed only after a render.
+        check('first render reveals the document', document.documentElement.hasAttribute('data-ready'), true);
+
+        // Initial state: enabled, healthy, never-seen -> waiting for a player.
+        check('initial status waiting', statusEl.textContent, 'Open the Spotify or Amazon Music web player to begin');
+        check('initial tone idle', statusEl.dataset.tone, 'idle');
+        check('initial count zero', countEl.textContent, '0');
+        check('initial today zero', todayEl.textContent, '0');
+        check('initial saved zero', savedEl.textContent, '0');
+        check('initial spotify count zero', spotifyEl.textContent, '0');
+        check('initial amazon count zero', amazonEl.textContent, '0');
+        check('initial mute toggle on', enabledEl.checked, true);
+        check('initial indicator toggle on', indicatorEl.checked, true);
+        check('repo link uses homepage_url', repoEl.href, 'https://example.test/repo');
+
+        // Once a player has reported in, status is Active.
+        set({ lastSeen: Date.now() });
+        check('after lastSeen: Active', statusEl.textContent, 'Active');
+
+        // The count reflects storage live (onChanged -> re-render), and time
+        // saved is derived from it: 4 ads x 30s = 120s = 2 min.
+        set({ adsMuted: 4 });
+        check('count updates live from storage', countEl.textContent, '4');
+        check('saved derives from count', savedEl.textContent, '2');
+
+        // Per-site and today are read straight from storage.
+        set({ perSite: { spotify: 3, amazon: 1 } });
+        check('spotify count from storage', spotifyEl.textContent, '3');
+        check('amazon count from storage', amazonEl.textContent, '1');
+        set({ history: { [today]: 5 } });
+        check('today count from history', todayEl.textContent, '5');
+
+        // Health problems surface as warnings.
+        set({ health: 'stale' });
+        check('stale message', statusEl.textContent, 'The player changed — detection needs an update');
+        check('stale tone warn', statusEl.dataset.tone, 'warn');
+        set({ health: 'stuck' });
+        check('stuck message', statusEl.textContent, 'Stopped muting: the ad flag never cleared');
+        check('stuck tone warn', statusEl.dataset.tone, 'warn');
+
+        // Disabling shows Paused and unticks the box.
+        set({ health: 'ok', enabled: false });
+        check('disabled: Paused', statusEl.textContent, 'Paused');
+        check('disabled: mute toggle off', enabledEl.checked, false);
+
+        // Toggling a checkbox writes back to storage.
+        enabledEl.checked = true;
+        enabledEl.dispatchEvent(new Event('change'));
+        check('toggling mute writes enabled=true', window.__backing.enabled, true);
+        indicatorEl.checked = false;
+        indicatorEl.dispatchEvent(new Event('change'));
+        check('toggling indicator writes indicator=false', window.__backing.indicator, false);
+
+        // The Settings button opens the options page.
+        settingsEl.click();
+        check('settings button opens options page', window.__optionsOpened, 1);
+
+        const failed = results.filter((r) => r.startsWith('FAIL')).length;
+        results.push('', failed ? `${failed} FAILED` : `ALL ${results.length} PASSED`);
+        document.getElementById('results').textContent = results.join('\n');
+      })();
+    </script>
+  </body>
+</html>

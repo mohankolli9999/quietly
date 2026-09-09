@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Quietly",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Mutes audio ads on the Spotify and Amazon Music web players. No host permissions, no tracking, no remote code.",
   "homepage_url": "https://github.com/mohankolli9999/quietly",
   "icons": {
@@ -32,5 +32,9 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
+  },
+  "options_ui": {
+    "page": "src/options.html",
+    "open_in_tab": true
   }
 }
