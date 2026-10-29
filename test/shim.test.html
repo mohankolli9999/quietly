@@ -8,6 +8,8 @@
     <meta charset="utf-8" />
     <title>Quietly shim test</title>
     <!-- Loaded before the fake player exists, mirroring run_at: document_start -->
+    <!-- hostname is empty under file://, so the shim reads this to pick the adapter -->
+    <script>window.__quietlySite = 'spotify';</script>
     <script src="../src/shim.js"></script>
   </head>
   <body>
@@ -109,6 +111,34 @@
         setAdType(null);
         await settle();
         check('missing attribute reports stale', states.at(-1).health, 'stale');
+
+        // Spotify has no skip path (its ad shares the DRM CDN), so even armed
+        // for block it must only mute — never seek.
+        const spSeek = document.createElement('audio');
+        Object.defineProperty(spSeek, 'src', { value: 'https://x/ad.mp3', configurable: true });
+        Object.defineProperty(spSeek, 'currentSrc', { value: 'https://x/ad.mp3', configurable: true });
+        Object.defineProperty(spSeek, 'duration', { value: 30, configurable: true });
+        Object.defineProperty(spSeek, 'seekable', { value: { length: 1 }, configurable: true });
+        let spCt = 4;
+        Object.defineProperty(spSeek, 'currentTime', {
+          configurable: true,
+          get: () => spCt,
+          set: (v) => {
+            spCt = v;
+          }
+        });
+        document.dispatchEvent(
+          new CustomEvent('__quietly_config', {
+            detail: JSON.stringify({ enabled: true, mode: 'block' })
+          })
+        );
+        setAdType('ad-type-ad');
+        await settle();
+        check('spotify: block mode never enables blocking', states.at(-1).blocking, false);
+        check('spotify: ad element muted', spSeek.muted, true);
+        check('spotify: never seeks even when block is requested', spSeek.currentTime, 4);
+        setAdType('ad-type-none');
+        await settle();
 
         const failed = results.filter((r) => r.startsWith('FAIL')).length;
         results.push('', failed ? `${failed} FAILED` : `ALL ${results.length} PASSED`);

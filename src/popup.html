@@ -11,7 +11,17 @@
       <p id="status" class="status">Checking…</p>
     </header>
 
-    <p class="count"><strong id="count">0</strong> ads muted</p>
+    <div class="stats">
+      <p class="count"><strong id="count">0</strong> ads muted</p>
+      <p class="meta">
+        <span><strong id="today">0</strong> today</span>
+        <span><strong id="saved">0</strong> min saved</span>
+      </p>
+      <p class="bysite">
+        <span>Spotify <strong id="spotifyCount">0</strong></span>
+        <span>Amazon <strong id="amazonCount">0</strong></span>
+      </p>
+    </div>
 
     <label class="row">
       <span>Mute ads</span>
@@ -24,6 +34,7 @@
     </label>
 
     <footer>
+      <button type="button" id="settings" class="link">Settings</button>
       <a id="repo" href="#" target="_blank" rel="noreferrer noopener">Source code</a>
     </footer>
 
